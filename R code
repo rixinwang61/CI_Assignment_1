@@ -1,0 +1,186 @@
+# R version 4.1.2 was used in this project.
+# Survival analysis
+rna.data <- read.table('TCGA.PAAD.sampleMap_HiSeqV2',sep = '\t',header = TRUE,row.names = 1)
+rna.data <- as.matrix(rna.data)
+survival.data <- read.table('survival%2FPAAD_survival.txt',sep = '\t',header = TRUE,row.names = 1)
+clin.data <- read.table("TCGA.PAAD.sampleMap_PAAD_clinicalMatrix", sep="\t", header=TRUE, row.names=1)
+clin.data <- clin.data[colnames(rna.data),]
+# Substitute the '-' in the row names of survival data and clinical data with '.' 
+rownames(survival.data)<-gsub(rownames(survival.data), pattern="-", replace=".")
+rownames(clin.data) <- gsub(rownames(clin.data),pattern = '-',replace='.')
+# Get os.event and os.time from survival data
+os.event <- as.numeric(survival.data[colnames(rna.data),]$OS)
+os.time <- survival.data[colnames(rna.data),]$OS.time
+library(survival)
+# Create survival object os for further analysis
+os <- Surv(os.time,os.event)
+# Investigate the correlation between each gene from RNA data and the survival outcome from survival data 
+univariate.result <- array(NA,c(nrow(rna.data),4))
+univariate.result <- as.data.frame(univariate.result)
+colnames(univariate.result) <- c('Hazard_ratio','LCI','UCI','P.value')
+rownames(univariate.result) <- rownames(rna.data)
+for (i in 1:nrow(univariate.result))
+{coxphmodel <- coxph(os~as.numeric(rna.data[i,])) 
+univariate.result$Hazard_ratio[i] <- summary(coxphmodel)$coef[1,2] 
+univariate.result$LCI[i] <- summary(coxphmodel)$conf.int[1,3] 
+univariate.result$UCI[i] <- summary(coxphmodel)$conf.int[1,4] 
+univariate.result$P.value[i] <- summary(coxphmodel)$coef[1,5]
+}
+univariate.result <- as.data.frame(univariate.result)
+univariate.result$adj.pval <- p.adjust(univariate.result$P.value,method = "fdr")
+# Arrange the data frame by adjusted P.value
+univariate.result <- univariate.result[order(univariate.result$adj.pval,decreasing =FALSE),] 
+# View the top 10 genes associated with overall survival
+View(univariate.result[1:10,])
+# Evaluate the correlation between overall survival and individual risk factors
+# Family history of cancer
+family_history <- rep(NA,nrow(clin.data)) 
+family_history[which(clin.data$family_history_of_cancer=='NO')] <- 0 
+family_history[which(clin.data$family_history_of_cancer=='YES')] <- 1
+# Alcohol history documented
+alcohol_history <- rep(NA,nrow(clin.data)) 
+alcohol_history[which(clin.data$alcohol_history_documented=='NO')] <- 0 
+alcohol_history[which(clin.data$alcohol_history_documented=='YES')] <- 1
+# Age at initial pathological diagnosis
+age <- as.numeric(clin.data$age_at_initial_pathologic_diagnosis) 
+# Gender
+gender <- as.factor(clin.data$gender)
+# History of chronic pancreatitis
+pancreatitis_history <- rep(NA,nrow(clin.data)) 
+pancreatitis_history[which(clin.data$history_of_chronic_pancreatitis=='NO')] <- 0 
+pancreatitis_history[which(clin.data$history_of_chronic_pancreatitis=='YES')] <- 1 
+# History of diabetes
+diabetes_history <- rep(NA,nrow(clin.data)) 
+diabetes_history[which(clin.data$history_of_diabetes=='YES')] <- 1 
+diabetes_history[which(clin.data$history_of_diabetes=='NO')] <- 0 
+# Weight
+weight <- as.numeric(clin.data$initial_weight)
+# Histological type 
+ductal_carcinoma <- rep(0,nrow(clin.data)) 
+ductal_carcinoma[which(clin.data$histological_type=='Pancreas-Adenocarcinoma Ductal Type')] <- 1
+# Create a dataframe for potential variables that may play a role in overall survival rate
+clin.variable <- data.frame(age,gender,weight,diabetes_history,pancreatitis_history,family_history,alcohol_history,ductal_carcinoma)
+rownames(clin.variable) <- rownames(clin.data)
+# Do coxph regression for each potential clinical variable
+clin.result <- array(NA,c(ncol(clin.variable),4))
+rownames(clin.result) <- colnames(clin.variable) 
+colnames(clin.result) <- c('HR','LCI','UCI','Pval') 
+clin.result <- as.data.frame(clin.result)
+for (i in 1:ncol(clin.variable))
+{coxphmodel <- coxph(os~clin.variable[,i])
+clin.result$HR[i] <- summary(coxphmodel)$coef[1,2]
+clin.result$LCI[i] <- summary(coxphmodel)$conf.int[1,3]
+clin.result$UCI[i] <- summary(coxphmodel)$conf.int[1,4]
+clin.result$Pval[i] <- summary(coxphmodel)$coef[1,5]
+}
+clin.result <- as.data.frame(clin.result)
+clin.result$adj.pval <- p.adjust(clin.result$Pval,method = 'fdr')
+clin.result <- clin.result[order(clin.result$adj.pval,decreasing = F),]
+# Multivariate Cox proportional hazard regression model
+multivariate.result <- array(NA,c(nrow(rna.data),4))
+multivariate.result <- as.data.frame(multivariate.result) 
+colnames(multivariate.result) <- c('Hazard_ratio','LCI','UCI','P.value') 
+rownames(multivariate.result) <- rownames(rna.data)
+for (i in 1:nrow(multivariate.result))
+{coxphmodel2 <- coxph(os~rna.data[i,]+ductal_carcinoma+as.numeric(age)) 
+multivariate.result$Hazard_ratio[i] <- summary(coxphmodel2)$coef[1,2] 
+multivariate.result$LCI[i] <- summary(coxphmodel2)$conf.int[1,3] 
+multivariate.result$UCI[i] <- summary(coxphmodel2)$conf.int[1,4]
+multivariate.result$P.value[i] <- summary(coxphmodel2)$coef[1,5]
+}
+multivariate.result <- as.data.frame(multivariate.result) 
+multivariate.result$adj.pval <- p.adjust(multivariate.result$P.value,method = "fdr") 
+# Arrange the data frame by adjusted P.value
+multivariate.result <- multivariate.result[order(multivariate.result$adj.pval,decreasing =FALSE),] 
+# View the top 10 genes associated with overall survival
+View(multivariate.result[1:10,])
+# Km plot
+trim67.high <- as.numeric(rna.data['TRIM67',]>median(rna.data['TRIM67',])) 
+png('OS_versus_trim67_expression.png',width=6,height=6,units='in',res=300) 
+plot(survfit(os~trim67.high),lwd=2,col=c('green','red'),xlab='Survival time (days)',ylab='Survival probability',main='Overall survival versus TRIM67 expression')
+legend('topright',legend = c('TRIM67_low','TRIM67_high'),col = c('green','red'),lwd = 2) text(2000,0.7,'HR=0.51 (95% CI: 0.39-0.67)')
+dev.off()
+
+# Methylation analysis
+meth.anno <- readRDS("annot450k.rds")
+meth.data <- read.table('TCGA.PAAD.sampleMap_HumanMethylation450',sep = '\t',header = T,row.names = 1)
+# Allign datasets
+meth.data <- meth.data[,colnames(rna.data)]
+# Get trim67 related methylation data
+trim67.cgsite <- rownames(meth.anno)[which(meth.anno$UCSC_RefGene_Name=="TRIM67")] 
+trim67.meth.data <- meth.data[trim67.cgsite,] 
+na.count<-apply(trim67.meth.data,1,function(x) sum(as.numeric(is.na(x)))) 
+exclude<-as.numeric(na.count>0.5*ncol(trim67.meth.data))
+trim67.meth.data <- trim67.meth.data[which(exclude==0),] 
+results<-array(NA,c(nrow(trim67.meth.data),4))
+rownames(results)<-rownames(trim67.meth.data) 
+colnames(results)<-c("Coefficient","p.value","Mean.high.TRIM67","Mean.low.TRIM67")
+# Because neither RNA data nor methylation data was normally distributed, spearman correlation was used in this case.
+for (i in 1:nrow(trim67.meth.data))
+{ results[i,1]<-cor.test(as.numeric(rna.data["TRIM67",]),as.numeric(trim67.meth.data[i,]), method = 'spearman')$est
+results[i,2]<-cor.test(as.numeric(rna.data["TRIM67",]),as.numeric(trim67.meth.data[i,]), method = 'spearman')$p.value
+}
+results[,3] <- apply(trim67.meth.data[,which(trim67.high==1)],1,mean,na.rm=T)
+results[,4] <- apply(trim67.meth.data[,which(trim67.high==0)],1,mean,na.rm=T)
+results <- as.data.frame(results)
+results$p.adjust <- p.adjust(results$p.value,method = 'fdr')
+results <- results[order(results$p.adjust,decreasing = F),]
+# Create plot of methylation versus RNA expression 
+png('TRIM67_RNAexpVSmethylation.png',width=6,height=6,units='in',res=300)
+plot(as.numeric(trim67.meth.data["cg09308842",]),as.numeric(rna.data["TRIM67",]), col='blue',xlab="cg09308842 beta value", ylab="TRIM67 gene expression level", main = 'TRIM67 expression level versus cg09308842 methylation')
+dev.off()
+
+# Mutation analysis
+mutation.data <- read.csv('mutation.data.csv',header = T,row.names = NULL) 
+mutation.data$sample<-gsub(mutation.data$sample, pattern="-", replace=".")
+patientid <- unique(mutation.data$sample)
+mutation.data.trim67 <- mutation.data[which(mutation.data$gene=='TRIM67'),]
+trim67.mutation <- array(0,dim = c(length(patientid),1))
+rownames(trim67.mutation) <- patientid
+colnames(trim67.mutation) <- c('TRIM67_mutation (1 = mutation, 0 = WT)') 
+trim67.mutation[c(mutation.data.trim67$sample),] <- 1
+os2 <- Surv(survival.data[patientid,]$OS.time,survival.data[patientid,]$OS)
+survdiff(os2~trim67.mutation)
+trim67.effective.mutation <- array(0,dim = c(length(patientid),1)) 
+rownames(trim67.effective.mutation) <- patientid
+colnames(trim67.effective.mutation) <- c('TRIM67_mutation (1 = effective_mutation)') 
+trim67.effective.mutation[c('TCGA.2L.AAQL.01','TCGA.FB.AAPP.01'),] <- 1 
+survdiff(os2~trim67.effective.mutation)
+
+# Correlation between trim67 gene mutation and rna level
+commonpatient <- intersect(patientid,colnames(rna.data))
+rna.data2 <- rna.data[,commonpatient]
+trim67.effective.mutation2 <- trim67.effective.mutation[commonpatient,] 
+cor.test(rna.data2['TRIM67',],trim67.effective.mutation2,method = 'spearman') 
+wilcox.test(rna.data2['TRIM67',]~as.factor(trim67.effective.mutation2)) 
+png('boxplot_TRIM67exp_mutation.png',width=6,height=6,units='in',res=300) 
+boxplot(rna.data2['TRIM67',]~as.factor(trim67.effective.mutation2),col='light blue',xlab = 'TRIM67 mutation status (0: WT; 1: Missense mutation)',ylab = 'TRIM67 gene expression level',main='Gene expression level versus mutation status for TRIM67')
+dev.off()
+
+# CNV analysis
+cnv.data <- read.table('TCGA.PAAD.sampleMap_Gistic2_CopyNumber_Gistic2_all_thresholded.by_genes',header = T,row.names = 1,sep = '\t')
+trim67.cnv.data <- cnv.data[rownames(cnv.data)=='TRIM67',]
+trim67.cnv.table <- array(0,dim = c(1,5))
+rownames(trim67.cnv.table) <- 'TRIM67'
+colnames(trim67.cnv.table) <- c('homozygous_del','single_copy_del','normal','low_amp','high_amp') trim67.cnv.table[1,1] <- sum(trim67.cnv.data==-2)
+trim67.cnv.table[1,2] <- sum(trim67.cnv.data==-1)
+trim67.cnv.table[1,3] <- sum(trim67.cnv.data==0)
+trim67.cnv.table[1,4] <- sum(trim67.cnv.data==1)
+trim67.cnv.table[1,5] <- sum(trim67.cnv.data==2)
+png('CNV_distribution.png',width = 6,height = 6,units = 'in',res=300)
+barplot(trim67.cnv.table,col = 'light blue',names.arg=c('double_del','single_del','normal','low_amp','high_amp'),ylim = c(0,120),xlab='CNV category',ylab='Number of events',cex.names = 0.8,main = 'Distribution of CNV in TRIM67')
+dev.off()
+commonpatient2 <- intersect(colnames(cnv.data),colnames(rna.data))
+trim67.amp <- rep(0,length(commonpatient2)) 
+rna.data3 <- rna.data[,commonpatient2] 
+trim67.cnv.data3 <- trim67.cnv.data[,commonpatient2] 
+trim67.amp[which(trim67.cnv.data3==1)] <- 1 
+trim67.amp[which(trim67.cnv.data3==2)] <- 1
+# spearman's correlation test to see if the degree of cnv correlates with gene expression level 
+cor.test(rna.data3['TRIM67',],as.numeric(trim67.cnv.data3),method = 'spearman')
+# wilcox.test to see if copy number amplification drives the difference of gene expression level 
+wilcox.test(rna.data3['TRIM67',]~as.factor(trim67.amp),alternative='greater') 
+png('boxplot_TRIM67exp_CNV.png',width=6,height=6,units='in',res=300) 
+boxplot(rna.data3['TRIM67',]~as.factor(trim67.amp),xlab = 'TRIM67 CNV status (0: normal/deletion; 1: CNV amplification)',ylab = 'TRIM67 gene expression level',main='Gene expression level versus CNV status for TRIM67')
+stripchart(as.numeric(rna.data3["TRIM67",])~as.factor(trim67.amp), vertical = TRUE,method = "jitter",add = TRUE, pch=20)
+dev.off()
