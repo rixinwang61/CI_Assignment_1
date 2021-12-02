@@ -162,7 +162,8 @@ cnv.data <- read.table('TCGA.PAAD.sampleMap_Gistic2_CopyNumber_Gistic2_all_thres
 trim67.cnv.data <- cnv.data[rownames(cnv.data)=='TRIM67',]
 trim67.cnv.table <- array(0,dim = c(1,5))
 rownames(trim67.cnv.table) <- 'TRIM67'
-colnames(trim67.cnv.table) <- c('homozygous_del','single_copy_del','normal','low_amp','high_amp') trim67.cnv.table[1,1] <- sum(trim67.cnv.data==-2)
+colnames(trim67.cnv.table) <- c('homozygous_del','single_copy_del','normal','low_amp','high_amp') 
+trim67.cnv.table[1,1] <- sum(trim67.cnv.data==-2)
 trim67.cnv.table[1,2] <- sum(trim67.cnv.data==-1)
 trim67.cnv.table[1,3] <- sum(trim67.cnv.data==0)
 trim67.cnv.table[1,4] <- sum(trim67.cnv.data==1)
