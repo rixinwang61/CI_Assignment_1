@@ -98,7 +98,8 @@ View(multivariate.result[1:10,])
 trim67.high <- as.numeric(rna.data['TRIM67',]>median(rna.data['TRIM67',])) 
 png('OS_versus_trim67_expression.png',width=6,height=6,units='in',res=300) 
 plot(survfit(os~trim67.high),lwd=2,col=c('green','red'),xlab='Survival time (days)',ylab='Survival probability',main='Overall survival versus TRIM67 expression')
-legend('topright',legend = c('TRIM67_low','TRIM67_high'),col = c('green','red'),lwd = 2) text(2000,0.7,'HR=0.51 (95% CI: 0.39-0.67)')
+legend('topright',legend = c('TRIM67_low','TRIM67_high'),col = c('green','red'),lwd = 2) 
+text(2000,0.7,'HR=0.51 (95% CI: 0.39-0.67)')
 dev.off()
 
 # Methylation analysis
